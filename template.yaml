@@ -6,6 +6,43 @@ Resources:
   SAMLogs:  
     Type: AWS::Logs::LogGroup
 
+  OrdersApi:
+    Type: AWS::Serverless::HttpApi
+    Properties:
+      FailOnWarnings: True
+      DefinitionBody:
+        info:
+          version: '1.0'
+          title:
+            Ref: AWS::StackName
+        paths:
+          "/order":
+            post:
+              responses: 
+                default:
+                  description: "Default response for POST /"
+              x-amazon-apigateway-integration:
+                integrationSubtype: "StepFunctions-StartSyncExecution"
+                credentials:
+                  Fn::GetAtt: [HttpApiRole, Arn]
+                requestParameters:
+                  Input: "$request.body"
+                  StateMachineArn: !Ref OrderStateMachine
+                payloadFormatVersion: "1.0"
+                type: "aws_proxy"
+                connectionType: "INTERNET"
+        openapi: 3.0.1
+        x-amazon-apigateway-cors:
+          allowMethods:
+            - "POST"
+          allowHeaders:
+            - "content-type"
+          maxAge: 0
+          allowCredentials: false
+          allowOrigins:
+          - "*"
+        x-amazon-apigateway-importexport-version: "1.0"
+
   OrderStateMachine:
     Type: AWS::Serverless::StateMachine
     Properties:
@@ -15,12 +52,6 @@ Resources:
         MakePaymentFunctionArn: !GetAtt MakePaymentFunction.Arn
         MakeOrderFunctionArn: !GetAtt MakeOrderFunction.Arn
         OrderFailureFunctionArn: !GetAtt OrderFailureFunction.Arn
-      Events:
-        OrderApiEvent:
-          Type: Api
-          Properties:
-            Method: post
-            Path: /order
       Logging:
         Destinations:
           - CloudWatchLogsLogGroup:
@@ -78,11 +109,28 @@ Resources:
   OrdersTable:
     Type: AWS::Serverless::SimpleTable
   
+  HttpApiRole:
+    Type: 'AWS::IAM::Role'
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: 2012-10-17
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service:
+              - apigateway.amazonaws.com
+            Action:
+              - 'sts:AssumeRole'
+      Policies:
+      - PolicyName: AllowSFNExec
+        PolicyDocument:
+          Version: 2012-10-17
+          Statement:
+            - Effect: Allow
+              Action: "states:StartSyncExecution"
+              Resource: !Ref OrderStateMachine
 
 Outputs:
-  # ServerlessRestApi is an implicit API created out of Events key under Serverless::Function
-  # Find out more about other implicit resources you can reference within SAM
-  # https://github.com/awslabs/serverless-application-model/blob/master/docs/internals/generated_resources.rst#api
   OrderApi:
     Description: "API Gateway endpoint URL for Prod stage for Order function"
-    Value: !Sub "https://${ServerlessRestApi}.execute-api.${AWS::Region}.amazonaws.com/Prod/order/"
+    Value: !Sub "https://${OrdersApi}.execute-api.${AWS::Region}.amazonaws.com/order"
