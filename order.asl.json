@@ -1,0 +1,54 @@
+{
+    "Comment": "A state machine that makes a payment and an order to a restaurant.",
+    "StartAt": "Make Payment",
+    "States": {
+      "Make Payment": {
+        "Type": "Task",
+        "Resource": "${MakePaymentFunctionArn}",
+        "Next": "Payment Successful?",
+        "ResultPath": "$.payment"
+      },
+      "Payment Successful?": {
+        "Type": "Choice",
+        "Choices": [
+          {
+            "Variable": "$.payment.valid",
+            "BooleanEquals": true,
+            "Next": "Make Order"
+          }
+        ],
+        "Default": "Payment Failure"
+      },
+      "Make Order": {
+        "Type": "Task",
+        "Resource": "${MakeOrderFunctionArn}",
+        "Next": "Order Successful?",
+        "ResultPath": "$.order",
+        "InputPath": "$.payment.orderId"
+      },
+      "Payment Failure": {
+        "Type": "Fail",
+        "Cause": "Payment processing failed"
+      },
+      "Order Successful?": {
+        "Type": "Choice",
+        "Choices": [
+          {
+            "Variable": "$.order.valid",
+            "BooleanEquals": true,
+            "Next": "Order Placed"
+          }
+        ],
+        "Default": "Order Failure"
+      },
+      "Order Placed": {
+        "Type": "Succeed"
+      },
+      "Order Failure": {
+        "Type": "Task",
+        "Resource": "${OrderFailureFunctionArn}",
+        "InputPath": "$.order.orderId",
+        "End": true
+      }
+    }
+  }
